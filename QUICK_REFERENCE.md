@@ -236,5 +236,5 @@ For issues or questions:
 ---
 
 **MarsGenix** - Built with ❤️ using MERN Stack  
-**Developer:** Anmol Yadav | **Date:** December 2024
+**Developer:** Dharam | **Date:** December 2024
 

@@ -6,7 +6,9 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import CustomerDashboard from './pages/customer/Dashboard';
+import CustomerTaskDetails from './pages/customer/TaskDetails';
 import HelperDashboard from './pages/helper/Dashboard';
+import HelperProfile from './pages/helper/Profile';
 import AdminDashboard from './pages/admin/Dashboard';
 
 // Protected Route Component
@@ -69,6 +71,14 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/customer/tasks/:id"
+        element={
+          <ProtectedRoute allowedRoles={['customer']}>
+            <CustomerTaskDetails />
+          </ProtectedRoute>
+        }
+      />
 
       {/* Helper Routes */}
       <Route
@@ -76,6 +86,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute allowedRoles={['helper']}>
             <HelperDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/helper/profile"
+        element={
+          <ProtectedRoute allowedRoles={['helper']}>
+            <HelperProfile />
           </ProtectedRoute>
         }
       />

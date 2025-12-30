@@ -20,13 +20,31 @@ connectDB();
 const app = express();
 
 // Middleware
-app.use(cors());
+// CORS configuration for production deployment
+const allowedOrigins = [
+  'http://localhost:5173',    // Local development
+  'http://localhost:3000',    // Alternative local port
+  process.env.FRONTEND_URL || 'https://marsgenix.vercel.app' // Production Vercel URL
+];
+
+app.use(cors({
+  origin: process.env.NODE_ENV === 'production' ? allowedOrigins : '*',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.get('/', (req, res) => {
   res.json({ message: 'MarsGenix API is running...' });
+});
+
+// Health check endpoint for deployment monitoring
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date() });
 });
 
 app.use('/api/auth', authRoutes);

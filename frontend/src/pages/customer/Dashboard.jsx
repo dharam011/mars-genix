@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import axios from '../../utils/axios';
 import toast from 'react-hot-toast';
-import { Plus, Package, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { Plus, Package, Clock, CheckCircle, XCircle, Eye } from 'lucide-react';
 
 export default function CustomerDashboard() {
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -128,6 +130,13 @@ export default function CustomerDashboard() {
                       </p>
                     )}
                   </div>
+                  <button
+                    onClick={() => navigate(`/customer/tasks/${task._id}`)}
+                    className="btn btn-sm btn-primary flex items-center gap-2"
+                  >
+                    <Eye size={16} />
+                    View Details
+                  </button>
                 </div>
               </div>
             ))
@@ -156,8 +165,38 @@ function CreateTaskModal({ onClose, onSuccess }) {
     title: '',
     description: '',
     scheduledTime: '',
+    pickupLocation: {
+      address: '',
+      coordinates: [0, 0],
+    },
+    dropLocation: {
+      address: '',
+      coordinates: [0, 0],
+    },
   });
   const [loading, setLoading] = useState(false);
+  const [estimatedPrice, setEstimatedPrice] = useState(null);
+  const [calculatingPrice, setCalculatingPrice] = useState(false);
+
+  const calculatePrice = async () => {
+    if (!formData.pickupLocation.address || !formData.dropLocation.address) {
+      return;
+    }
+
+    setCalculatingPrice(true);
+    try {
+      const { data } = await axios.post('/customer/estimate-price', {
+        category: formData.category,
+        pickupLocation: formData.pickupLocation,
+        dropLocation: formData.dropLocation,
+      });
+      setEstimatedPrice(data.data.estimatedPrice);
+    } catch (error) {
+      console.error('Failed to calculate price:', error);
+    } finally {
+      setCalculatingPrice(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -174,8 +213,8 @@ function CreateTaskModal({ onClose, onSuccess }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <h2 className="text-2xl font-bold mb-4">Create New Task</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -216,6 +255,42 @@ function CreateTaskModal({ onClose, onSuccess }) {
             />
           </div>
           <div>
+            <label className="block text-sm font-medium mb-2">Pickup Location *</label>
+            <input
+              type="text"
+              value={formData.pickupLocation.address}
+              onChange={(e) => {
+                setFormData({
+                  ...formData,
+                  pickupLocation: { ...formData.pickupLocation, address: e.target.value },
+                });
+                setEstimatedPrice(null);
+              }}
+              onBlur={calculatePrice}
+              className="input"
+              placeholder="Enter pickup address"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Drop Location *</label>
+            <input
+              type="text"
+              value={formData.dropLocation.address}
+              onChange={(e) => {
+                setFormData({
+                  ...formData,
+                  dropLocation: { ...formData.dropLocation, address: e.target.value },
+                });
+                setEstimatedPrice(null);
+              }}
+              onBlur={calculatePrice}
+              className="input"
+              placeholder="Enter drop address"
+              required
+            />
+          </div>
+          <div>
             <label className="block text-sm font-medium mb-2">Scheduled Time</label>
             <input
               type="datetime-local"
@@ -225,6 +300,24 @@ function CreateTaskModal({ onClose, onSuccess }) {
               required
             />
           </div>
+
+          {/* Price Estimation */}
+          {(calculatingPrice || estimatedPrice) && (
+            <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-gray-700">Estimated Price:</span>
+                {calculatingPrice ? (
+                  <span className="text-sm text-gray-600">Calculating...</span>
+                ) : (
+                  <span className="text-2xl font-bold text-primary-600">₹{estimatedPrice}</span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Final price may vary based on actual distance and time
+              </p>
+            </div>
+          )}
+
           <div className="flex gap-3">
             <button type="submit" disabled={loading} className="btn btn-primary flex-1">
               {loading ? 'Creating...' : 'Create Task'}

@@ -16,6 +16,7 @@ export default function AdminDashboard() {
   const [analytics, setAnalytics] = useState(null);
   const [pendingHelpers, setPendingHelpers] = useState([]);
   const [allTasks, setAllTasks] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
 
@@ -25,15 +26,17 @@ export default function AdminDashboard() {
 
   const fetchData = async () => {
     try {
-      const [analyticsRes, helpersRes, tasksRes] = await Promise.all([
+      const [analyticsRes, helpersRes, tasksRes, usersRes] = await Promise.all([
         axios.get('/admin/analytics'),
         axios.get('/admin/helpers/pending'),
         axios.get('/admin/tasks'),
+        axios.get('/admin/users'),
       ]);
-      
+
       setAnalytics(analyticsRes.data.data);
       setPendingHelpers(helpersRes.data.data);
       setAllTasks(tasksRes.data.data);
+      setAllUsers(usersRes.data.data);
     } catch (error) {
       toast.error('Failed to fetch data');
     } finally {
@@ -157,6 +160,16 @@ export default function AdminDashboard() {
           >
             All Tasks ({allTasks.length})
           </button>
+          <button
+            onClick={() => setActiveTab('users')}
+            className={`pb-2 px-4 font-medium ${
+              activeTab === 'users'
+                ? 'border-b-2 border-primary-600 text-primary-600'
+                : 'text-gray-600'
+            }`}
+          >
+            All Users ({allUsers.length})
+          </button>
         </div>
 
         {/* Content */}
@@ -174,6 +187,10 @@ export default function AdminDashboard() {
           
           {activeTab === 'tasks' && (
             <TasksTab tasks={allTasks} />
+          )}
+
+          {activeTab === 'users' && (
+            <UsersTab users={allUsers} onUpdate={fetchData} />
           )}
         </div>
       </div>
@@ -323,6 +340,188 @@ function TasksTab({ tasks }) {
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// Users Tab
+function UsersTab({ users, onUpdate }) {
+  const [filter, setFilter] = useState('all'); // all, customer, helper, admin
+  const [statusFilter, setStatusFilter] = useState('all'); // all, active, inactive
+  const [searchTerm, setSearchTerm] = useState('');
+
+  const handleToggleStatus = async (userId, currentStatus) => {
+    try {
+      await axios.put(`/admin/users/${userId}/status`, {
+        isActive: !currentStatus
+      });
+      toast.success('User status updated!');
+      onUpdate();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to update status');
+    }
+  };
+
+  const handleDeleteUser = async (userId, userName) => {
+    if (!window.confirm(`Are you sure you want to delete ${userName}? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await axios.delete(`/admin/users/${userId}`);
+      toast.success('User deleted successfully!');
+      onUpdate();
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to delete user');
+    }
+  };
+
+  // Filter users
+  const filteredUsers = users.filter(user => {
+    const matchesRole = filter === 'all' || user.role === filter;
+    const matchesStatus = statusFilter === 'all' ||
+      (statusFilter === 'active' && user.isActive) ||
+      (statusFilter === 'inactive' && !user.isActive);
+    const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.phone.includes(searchTerm);
+
+    return matchesRole && matchesStatus && matchesSearch;
+  });
+
+  return (
+    <div className="space-y-4">
+      {/* Filters */}
+      <div className="card">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Search */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Search
+            </label>
+            <input
+              type="text"
+              placeholder="Name, email, or phone..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="input"
+            />
+          </div>
+
+          {/* Role Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Role
+            </label>
+            <select
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              className="input"
+            >
+              <option value="all">All Roles</option>
+              <option value="customer">Customers</option>
+              <option value="helper">Helpers</option>
+              <option value="admin">Admins</option>
+            </select>
+          </div>
+
+          {/* Status Filter */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Status
+            </label>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="input"
+            >
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="inactive">Inactive</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* Results Count */}
+      <div className="text-sm text-gray-600">
+        Showing {filteredUsers.length} of {users.length} users
+      </div>
+
+      {/* Users Table */}
+      {filteredUsers.length === 0 ? (
+        <div className="card text-center py-12">
+          <Users size={48} className="mx-auto text-gray-400 mb-4" />
+          <p className="text-gray-500">No users found</p>
+        </div>
+      ) : (
+        <div className="card overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left py-3 px-4">User</th>
+                <th className="text-left py-3 px-4">Contact</th>
+                <th className="text-left py-3 px-4">Role</th>
+                <th className="text-left py-3 px-4">Status</th>
+                <th className="text-left py-3 px-4">Joined</th>
+                <th className="text-right py-3 px-4">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredUsers.map((user) => (
+                <tr key={user._id} className="border-b hover:bg-gray-50">
+                  <td className="py-3 px-4">
+                    <div className="font-medium">{user.name}</div>
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="text-sm text-gray-600">{user.email}</div>
+                    <div className="text-sm text-gray-500">{user.phone}</div>
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className={`badge ${
+                      user.role === 'admin' ? 'badge-error' :
+                      user.role === 'helper' ? 'badge-warning' :
+                      'badge-info'
+                    }`}>
+                      {user.role}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4">
+                    <span className={`badge ${
+                      user.isActive ? 'badge-success' : 'badge-secondary'
+                    }`}>
+                      {user.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-sm text-gray-600">
+                    {new Date(user.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="py-3 px-4">
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => handleToggleStatus(user._id, user.isActive)}
+                        className={`btn btn-sm ${
+                          user.isActive ? 'btn-secondary' : 'btn-success'
+                        }`}
+                        title={user.isActive ? 'Deactivate' : 'Activate'}
+                      >
+                        {user.isActive ? 'Deactivate' : 'Activate'}
+                      </button>
+                      <button
+                        onClick={() => handleDeleteUser(user._id, user.name)}
+                        className="btn btn-sm btn-error"
+                        title="Delete User"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

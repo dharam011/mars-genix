@@ -1,30 +1,43 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import axios from '../../utils/axios';
 import toast from 'react-hot-toast';
-import { 
-  Power, 
-  DollarSign, 
-  Star, 
-  CheckCircle, 
+import {
+  Power,
+  DollarSign,
+  Star,
+  CheckCircle,
   Package,
   Clock,
-  AlertCircle
+  AlertCircle,
+  RefreshCw,
+  Settings
 } from 'lucide-react';
 
 export default function HelperDashboard() {
+  const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
   const [availableTasks, setAvailableTasks] = useState([]);
   const [myTasks, setMyTasks] = useState([]);
   const [earnings, setEarnings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('available');
+  const [newTasksCount, setNewTasksCount] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     fetchData();
+
+    // Auto-refresh every 10 seconds for real-time updates
+    const interval = setInterval(() => {
+      fetchData(true); // Pass true to indicate background refresh
+    }, 10000); // 10 seconds
+
+    return () => clearInterval(interval); // Cleanup on unmount
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = async (isBackgroundRefresh = false) => {
     try {
       const [profileRes, availableRes, myTasksRes, earningsRes] = await Promise.all([
         axios.get('/helper/profile'),
@@ -32,13 +45,26 @@ export default function HelperDashboard() {
         axios.get('/helper/my-tasks'),
         axios.get('/helper/earnings'),
       ]);
-      
+
+      // Check for new tasks
+      const newAvailableTasks = availableRes.data.data;
+      if (isBackgroundRefresh && newAvailableTasks.length > availableTasks.length) {
+        const newCount = newAvailableTasks.length - availableTasks.length;
+        setNewTasksCount(newCount);
+        toast.success(`${newCount} new task${newCount > 1 ? 's' : ''} available!`, {
+          duration: 4000,
+          icon: '🔔',
+        });
+      }
+
       setProfile(profileRes.data.data);
-      setAvailableTasks(availableRes.data.data);
+      setAvailableTasks(newAvailableTasks);
       setMyTasks(myTasksRes.data.data);
       setEarnings(earningsRes.data.data);
     } catch (error) {
-      toast.error('Failed to fetch data');
+      if (!isBackgroundRefresh) {
+        toast.error('Failed to fetch data');
+      }
     } finally {
       setLoading(false);
     }
@@ -74,6 +100,12 @@ export default function HelperDashboard() {
     }
   };
 
+  const handleManualRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchData(true);
+    setTimeout(() => setIsRefreshing(false), 1000);
+  };
+
   if (loading) {
     return (
       <Layout title="Helper Dashboard">
@@ -99,6 +131,17 @@ export default function HelperDashboard() {
   return (
     <Layout title="Helper Dashboard">
       <div className="space-y-6">
+        {/* Header with Edit Profile Button */}
+        <div className="flex justify-end">
+          <button
+            onClick={() => navigate('/helper/profile')}
+            className="btn btn-secondary flex items-center gap-2"
+          >
+            <Settings size={18} />
+            Edit Profile
+          </button>
+        </div>
+
         {/* Stats & Controls */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="card">
@@ -157,27 +200,54 @@ export default function HelperDashboard() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-4 border-b">
-          <button
-            onClick={() => setActiveTab('available')}
-            className={`pb-2 px-4 font-medium ${
-              activeTab === 'available'
-                ? 'border-b-2 border-primary-600 text-primary-600'
-                : 'text-gray-600'
-            }`}
-          >
-            Available Tasks ({availableTasks.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('my-tasks')}
-            className={`pb-2 px-4 font-medium ${
-              activeTab === 'my-tasks'
-                ? 'border-b-2 border-primary-600 text-primary-600'
-                : 'text-gray-600'
-            }`}
-          >
-            My Tasks ({myTasks.length})
-          </button>
+        <div className="flex justify-between items-center border-b">
+          <div className="flex gap-4">
+            <button
+              onClick={() => {
+                setActiveTab('available');
+                setNewTasksCount(0); // Reset new tasks count when viewing
+              }}
+              className={`pb-2 px-4 font-medium relative ${
+                activeTab === 'available'
+                  ? 'border-b-2 border-primary-600 text-primary-600'
+                  : 'text-gray-600'
+              }`}
+            >
+              Available Tasks ({availableTasks.length})
+              {newTasksCount > 0 && activeTab !== 'available' && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center animate-pulse">
+                  {newTasksCount}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('my-tasks')}
+              className={`pb-2 px-4 font-medium ${
+                activeTab === 'my-tasks'
+                  ? 'border-b-2 border-primary-600 text-primary-600'
+                  : 'text-gray-600'
+              }`}
+            >
+              My Tasks ({myTasks.length})
+            </button>
+          </div>
+
+          {/* Real-time indicator & Manual Refresh */}
+          <div className="flex items-center gap-4 pb-2">
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <div className="h-2 w-2 bg-green-500 rounded-full animate-pulse"></div>
+              <span>Auto-updating</span>
+            </div>
+            <button
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
+              className="flex items-center gap-2 text-sm text-primary-600 hover:text-primary-700 disabled:opacity-50"
+              title="Refresh now"
+            >
+              <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
+              <span>Refresh</span>
+            </button>
+          </div>
         </div>
 
         {/* Tasks Display */}
